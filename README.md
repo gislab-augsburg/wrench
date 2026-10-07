@@ -101,6 +101,8 @@ pipeline = SensorRegistrationPipeline(
 result = asyncio.run(pipeline.run_async())
 ```
 
+See [LLM-free FROST-to-SDDI synchronization](docs/llm_free_sddi.md) for deterministic ObservedProperty grouping and conservative updates.
+
 ## Configuration
 
 Wrench supports YAML-based pipeline configuration through `PipelineRunner.from_config_file()`.

@@ -9,7 +9,7 @@ from wrench.utils.config import LLMConfig
 
 @pytest.fixture()
 def mock_openai():
-    with patch("wrench.metadataenricher.generator.OpenAI") as MockOpenAI:
+    with patch("openai.OpenAI") as MockOpenAI:
         mock_client = MagicMock()
         MockOpenAI.return_value = mock_client
         yield mock_client

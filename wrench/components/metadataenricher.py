@@ -18,8 +18,11 @@ class MetadataEnricher(StatefulComponent):
             pipeline.
     """
 
-    def __init__(self, metadataenricher: BaseMetadataEnricher):
+    def __init__(
+        self, metadataenricher: BaseMetadataEnricher, always_refresh: bool = False
+    ):
         self._metadataenricher = metadataenricher
+        self.always_refresh = always_refresh
         self.logger = logger.getChild(self.__class__.__name__)
 
     @validate_call
@@ -37,7 +40,7 @@ class MetadataEnricher(StatefulComponent):
             # always rebuild service_metadata
             service_metadata = self._metadataenricher.build_service_metadata(devices)
 
-            if not prev_group_metadata:
+            if not prev_group_metadata or self.always_refresh:
                 # First run - build all group metadata
                 group_metadata = [
                     self._metadataenricher.build_group_metadata(group)
@@ -45,15 +48,22 @@ class MetadataEnricher(StatefulComponent):
                 ]
 
                 self.state["prev_group_metadata"] = {
-                    group.name: [meta.title, meta.description]
-                    for group, meta in zip(groups, group_metadata)
+                    **(prev_group_metadata or {}),
+                    **{
+                        group.name: [meta.title, meta.description]
+                        for group, meta in zip(groups, group_metadata)
+                    },
                 }
                 result = Metadata(
                     service_metadata=service_metadata,
                     group_metadata=group_metadata,
                 )
 
-            elif not operations:
+            elif (
+                not operations
+                and not self.always_refresh
+                and not any(g.source_key for g in groups)
+            ):
                 # No operations - return empty result but preserve state
                 result = Metadata(
                     service_metadata=None,
@@ -80,8 +90,11 @@ class MetadataEnricher(StatefulComponent):
                         )
 
                 self.state["prev_group_metadata"] = {
-                    group.name: [meta.title, meta.description]
-                    for group, meta in zip(groups, group_metadata)
+                    **(prev_group_metadata or {}),
+                    **{
+                        group.name: [meta.title, meta.description]
+                        for group, meta in zip(groups, group_metadata)
+                    },
                 }
                 result = Metadata(
                     service_metadata=service_metadata,

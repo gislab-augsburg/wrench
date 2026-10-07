@@ -41,9 +41,11 @@ class TestPipelineRunTracker:
         assert record.end_time is not None
 
     async def test_get_run_records_sorted(self, tracker):
-        await tracker.record_run_start("run-1")
-        await tracker.record_run_start("run-2")
-        await tracker.record_run_start("run-3")
+        from datetime import datetime, timedelta
+
+        for index in range(3):
+            record = await tracker.record_run_start(f"run-{index + 1}")
+            record.start_time = datetime(2025, 1, 1) + timedelta(seconds=index)
         records = await tracker.get_run_records()
         assert len(records) == 3
         # Most recent first

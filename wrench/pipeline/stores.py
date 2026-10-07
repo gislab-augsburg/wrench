@@ -11,7 +11,10 @@ import abc
 import asyncio
 import json
 import os
+import tempfile
 from typing import Any, Generic, Optional, TypeVar
+
+from pydantic_core import to_jsonable_python
 
 T = TypeVar("T")
 
@@ -130,8 +133,16 @@ class FileStore(ResultStore):
             if not overwrite and os.path.exists(file_path):
                 raise KeyError(f"Key '{key}' already exists and overwrite is False")
 
-            with open(file_path, "w") as f:
-                json.dump(value, f)
+            fd, temporary = tempfile.mkstemp(dir=self.directory, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(to_jsonable_python(value), f)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temporary, file_path)
+            finally:
+                if os.path.exists(temporary):
+                    os.remove(temporary)
 
     async def get(self, key: str) -> Optional[Any]:
         file_path = self._get_file_path(key)

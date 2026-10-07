@@ -106,7 +106,7 @@ class TestFileStore:
         store._get_file_path("run:comp:status")
         # Colons and slashes are replaced with underscores
         path = store._get_file_path("a:b/c")
-        assert ":" not in path.split("/")[-1]
+        assert ":" not in __import__("pathlib").Path(path).name
 
 
 class TestResultStore:

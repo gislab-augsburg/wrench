@@ -24,7 +24,8 @@ def _prepared_url():
     The ENDPOINT constants contain newlines which get percent-encoded
     by requests. We need the exact encoded URL for mock matching.
     """
-    raw_url = f"{BASE_URL}/{ENDPOINT_WITH_MULTIDATASTREAM}"
+    endpoint = "".join(ENDPOINT_WITH_MULTIDATASTREAM.split())
+    raw_url = f"{BASE_URL}/{endpoint}"
     req = _requests_module.Request("GET", raw_url)
     return req.prepare().url
 
@@ -153,8 +154,8 @@ class TestPaginateErrorHandling:
             body=responses.ConnectionError("Connection refused"),
         )
         client = _make_client()
-        things = client.fetch_things()
-        assert things == []
+        with pytest.raises((_requests_module.RequestException, ValueError)):
+            client.fetch_things()
 
     @responses.activate
     def test_http_error_stops_pagination(self):
@@ -166,8 +167,8 @@ class TestPaginateErrorHandling:
             status=500,
         )
         client = _make_client()
-        things = client.fetch_things()
-        assert things == []
+        with pytest.raises((_requests_module.RequestException, ValueError)):
+            client.fetch_things()
 
     @responses.activate
     def test_missing_value_field_stops_pagination(self):
@@ -179,12 +180,12 @@ class TestPaginateErrorHandling:
             status=200,
         )
         client = _make_client()
-        things = client.fetch_things()
-        assert things == []
+        with pytest.raises((_requests_module.RequestException, ValueError)):
+            client.fetch_things()
 
     @responses.activate
     def test_validation_failure_skips_item(self, page1_json):
-        """Items that fail Pydantic validation are skipped, not fatal."""
+        """Invalid items abort the harvest so they cannot be mistaken for deletions."""
         _mock_multidatastream_check()
         bad_page = {
             "value": [
@@ -199,8 +200,8 @@ class TestPaginateErrorHandling:
             status=200,
         )
         client = _make_client()
-        things = client.fetch_things()
-        assert len(things) >= 1
+        with pytest.raises(ValueError, match="partial harvest"):
+            client.fetch_things()
 
     @responses.activate
     def test_error_on_second_page_returns_first_page_results(self, page1_json):
@@ -217,8 +218,8 @@ class TestPaginateErrorHandling:
             body=responses.ConnectionError("timeout"),
         )
         client = _make_client()
-        things = client.fetch_things()
-        assert len(things) == 2
+        with pytest.raises(_requests_module.RequestException):
+            client.fetch_things()
 
 
 class TestClientInit:

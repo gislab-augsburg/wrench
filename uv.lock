@@ -88,6 +88,7 @@ source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },
     { name = "ckanapi" },
+    { name = "fsspec" },
     { name = "geojson" },
     { name = "matplotlib" },
     { name = "openai" },
@@ -142,6 +143,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fsspec" },
     { name = "apscheduler", specifier = ">=3.11.0" },
     { name = "ckanapi", specifier = ">=4.8,<5.0" },
     { name = "flair", marker = "extra == 'kinetic'", specifier = ">=0.15.1" },

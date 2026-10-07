@@ -44,7 +44,8 @@ class Datastream(SensorThingsBase):
 
 
 class MultiDatastream(SensorThingsBase):
-    observation_type: str
+    observation_type: str = ""
+    multi_observation_data_types: list[str] = Field(default_factory=list)
     unit_of_measurements: list[dict]
     observed_area: dict | None = None
     phenomenon_time: str | None = None

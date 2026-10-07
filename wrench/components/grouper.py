@@ -30,7 +30,7 @@ class Grouper(StatefulComponent):
         # Case 1: Incremental update - apply operations to existing groups
         previous_groups = self.state.get("previous_groups")
 
-        if not previous_groups:
+        if not previous_groups or getattr(self._grouper, "full_refresh", False):
             try:
                 with monitor.track_component("Grouper") as metrics:
                     groups = self._grouper.group_devices(devices)

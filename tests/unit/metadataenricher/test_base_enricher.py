@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any
 
-import pytest
-
 from wrench.metadataenricher.base import BaseMetadataEnricher
 from wrench.models import CommonMetadata, Device, Group, TimeFrame
 
@@ -68,9 +66,7 @@ class TestCalculateTimeframe:
     def test_empty_devices_returns_max_min(self):
         enricher = StubEnricher(title="Test", description="Test service")
         result = enricher._calculate_timeframe([])
-        # No devices processed, boundaries stay at initial max/min
-        assert result.start_time == datetime.max.replace(tzinfo=timezone.utc)
-        assert result.latest_time == datetime.min.replace(tzinfo=timezone.utc)
+        assert result is None
 
 
 class TestBuildServiceMetadata:
@@ -128,18 +124,12 @@ class TestBuildGroupMetadata:
         assert result.description == "Weather sensors"
 
     def test_fallback_naming_without_content_generator(self, make_device):
-        """When no llm_config is provided, content_generator is not set.
-        The code raises AttributeError when trying to access it.
-        Providing title=None triggers the fallback path, but
-        self.content_generator access fails. We test the explicit title/desc
-        path which avoids the content_generator check entirely."""
         enricher = StubEnricher(title="Test", description="Test service")
-        device = make_device(id="d-1")
-        group = Group(name="weather", devices=[device])
-        # Without llm_config, accessing build_group_metadata without title/desc
-        # raises AttributeError because content_generator is never set.
-        with pytest.raises(AttributeError, match="content_generator"):
-            enricher.build_group_metadata(group)
+        group = Group(name="weather", devices=[make_device()])
+        metadata = enricher.build_group_metadata(group)
+        assert metadata.title == "weather"
+        assert metadata.description == "Auto-generated device group"
+        assert enricher.content_generator is None
 
     def test_group_metadata_has_tags(self, make_device):
         enricher = StubEnricher(title="Test", description="Test service")

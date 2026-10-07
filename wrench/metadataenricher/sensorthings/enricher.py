@@ -43,6 +43,18 @@ class SensorThingsMetadataEnricher(BaseMetadataEnricher):
         self.service_spatial_calculator = PolygonalExtentCalculator()
         self.group_spatial_calculator = GeometryCollector()
 
+    def build_service_metadata(self, devices):
+        metadata = super().build_service_metadata(devices)
+        metadata.source_key = self.base_url + "|service"
+        return metadata
+
+    def build_group_metadata(self, group, title=None, description=None):
+        metadata = super().build_group_metadata(group, title, description)
+        metadata.source_key = (
+            self.base_url + "|" + (group.source_key or "group:" + group.name)
+        )
+        return metadata
+
     def _get_source_type(self) -> str:
         """Return SensorThings source type."""
         return "sensorthings"

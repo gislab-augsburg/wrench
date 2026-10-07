@@ -19,8 +19,9 @@ from wrench.utils.performance import MemoryMonitor, log_performance_metrics
 class Harvester(StatefulComponent):
     """Harvester that determines operations by comparing with previous state."""
 
-    def __init__(self, harvester: BaseHarvester):
+    def __init__(self, harvester: BaseHarvester, always_refresh: bool = False):
         self._harvester = harvester
+        self.always_refresh = always_refresh
         self.logger = logger.getChild(self.__class__.__name__)
 
     @validate_call
@@ -76,7 +77,7 @@ class Harvester(StatefulComponent):
             self.logger.info("Detected %s changes: ", len(operations))
             self.logger.debug("Object IDs: %s", [op.device.id for op in operations])
 
-            if len(operations) == 0:
+            if len(operations) == 0 and not self.always_refresh:
                 self.logger.info(
                     "No new or updated items are discovered, stopping pipeline"
                 )
@@ -184,7 +185,13 @@ class Harvester(StatefulComponent):
             # For dictionary or complex content
             if isinstance(content, dict):
                 # Sort keys for consistent hashing
-                content_str = json.dumps(content, sort_keys=True)
+                content_str = json.dumps(
+                    content,
+                    sort_keys=True,
+                    default=lambda value: (
+                        sorted(value) if isinstance(value, set) else value.isoformat()
+                    ),
+                )
             else:
                 content_str = str(content)
 

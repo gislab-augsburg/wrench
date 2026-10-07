@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any
 from urllib.parse import quote
@@ -107,9 +108,8 @@ class SensorThingsHarvester(BaseHarvester):
                     if prop is None:
                         continue
                     # Source-local IDs are stable when display names change. Definitions
-                    # may be shared by several distinct properties; do not merge implicitly.
+                    # may be shared by distinct properties; do not merge implicitly.
                     pid = prop.source_id if prop.source_id is not None else prop.id
-                    import json
 
                     key = "ObservedProperties:" + json.dumps(pid, ensure_ascii=True)
                     result.append(

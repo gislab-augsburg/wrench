@@ -35,7 +35,10 @@ class SensorPipelineConfig(PipelineConfig):
         return [
             ComponentDefinition(
                 name="harvester",
-                component=Harvester(harvester=self.get_harvester()),
+                component=Harvester(
+                    harvester=self.get_harvester(),
+                    always_refresh=getattr(self.get_grouper(), "full_refresh", False),
+                ),
                 run_params={},
             ),
             ComponentDefinition(
@@ -46,7 +49,8 @@ class SensorPipelineConfig(PipelineConfig):
             ComponentDefinition(
                 name="metadataenricher",
                 component=MetadataEnricher(
-                    metadataenricher=self.get_metadataenricher()
+                    metadataenricher=self.get_metadataenricher(),
+                    always_refresh=getattr(self.get_grouper(), "full_refresh", False),
                 ),
                 run_params={},
             ),

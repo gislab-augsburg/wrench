@@ -107,8 +107,8 @@ class TestCreateDeviceGroups:
     def test_device_group_domain_groups_filtered(self, cataloger, group_metadata):
         result = cataloger._create_device_groups([group_metadata])
         group_names = [g["name"] for g in result[0].groups]
-        # "environment" is in DOMAIN_GROUPS, so it should appear
-        assert "environment" in group_names
+        # Dataset types no longer depend on CKAN category/domain groups.
+        assert group_names == []
 
     def test_device_group_invalid_domain_excluded(self, cataloger):
         meta = CommonMetadata(
@@ -132,67 +132,12 @@ class TestCreateDeviceGroups:
 
 
 class TestRegister:
-    def test_register_new_service_and_groups(
-        self, cataloger, mock_ckan, service_metadata, group_metadata
-    ):
-        result = cataloger.register(
-            service=service_metadata,
-            groups=[group_metadata],
-            managed_entries=None,
-        )
-        assert isinstance(result, list)
-        # Should have registered both service and group
-        assert "test-service" in result
-        assert "weather-group" in result
-        # package_create called for service and group
-        create_calls = [
-            c
-            for c in mock_ckan.call_action.call_args_list
-            if c.kwargs.get("action") == "package_create"
-            or (c.args and c.args[0] == "package_create")
-        ]
-        assert len(create_calls) >= 2
+    def test_missing_identity_refused(self, cataloger, service_metadata):
+        with pytest.raises(ValueError, match="source_key"):
+            cataloger.register(service_metadata, [], None)
 
-    def test_register_updates_existing_service(
-        self, cataloger, mock_ckan, service_metadata, group_metadata
-    ):
-        cataloger.register(
-            service=service_metadata,
-            groups=[group_metadata],
-            managed_entries=["test-service"],
-        )
-        # Service should be updated (package_patch) not created
-        patch_calls = [
-            c
-            for c in mock_ckan.call_action.call_args_list
-            if c.kwargs.get("action") == "package_patch"
-            or (c.args and c.args[0] == "package_patch")
-        ]
-        assert len(patch_calls) >= 1
-
-    def test_register_no_groups(self, cataloger, mock_ckan, service_metadata):
-        result = cataloger.register(
-            service=service_metadata,
-            groups=[],
-            managed_entries=None,
-        )
-        assert "test-service" in result
-
-    def test_register_creates_relationship(
-        self, cataloger, mock_ckan, service_metadata, group_metadata
-    ):
-        cataloger.register(
-            service=service_metadata,
-            groups=[group_metadata],
-            managed_entries=None,
-        )
-        relationship_calls = [
-            c
-            for c in mock_ckan.call_action.call_args_list
-            if c.kwargs.get("action") == "package_relationship_create"
-            or (c.args and c.args[0] == "package_relationship_create")
-        ]
-        assert len(relationship_calls) == 1
+    # Stateful API tests in test_safe_sync.py cover creation, updates, relations,
+    # manual curation, identity changes and recovery after partial writes.
 
 
 class TestDeleteResource:

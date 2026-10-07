@@ -1,5 +1,6 @@
 import time
 from typing import Generator
+from urllib.parse import urljoin
 
 import requests
 
@@ -36,7 +37,7 @@ class SensorThingsClient:
             base_url (str): The base URL of the server to fetch from
             config (PaginationConfig): The pagination config to use
         """
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/")
         self.config = config if config else PaginationConfig()
         self.logger = logger.getChild(self.__class__.__name__)
 
@@ -78,11 +79,16 @@ class SensorThingsClient:
         Yields:
             Validated model instances one at a time
         """
+        endpoint = "".join(endpoint.split())
         url = f"{self.base_url}/{endpoint}"
+        visited = set()
         items_fetched = 0
         page_count = 0
 
         while url and (limit == -1 or items_fetched < limit):
+            if url in visited:
+                raise ValueError("Repeated SensorThings pagination URL")
+            visited.add(url)
             page_count += 1
             self.logger.info(f"Fetching page {page_count}")
 
@@ -94,10 +100,7 @@ class SensorThingsClient:
 
                 # Check for valid response
                 if "value" not in data:
-                    self.logger.warning(
-                        "No 'value' field in response, stopping pagination"
-                    )
-                    break
+                    raise ValueError("SensorThings page has no value collection")
 
                 # Process and yield each item
                 items_on_page = 0
@@ -106,29 +109,62 @@ class SensorThingsClient:
                         break
 
                     try:
+                        self._expand_pages(item, url)
                         validated_item = model_class.model_validate(item)
                         yield validated_item
                         items_fetched += 1
                         items_on_page += 1
                     except Exception as e:
-                        self.logger.warning(f"Failed to validate item: {e}")
+                        raise ValueError(
+                            "Invalid SensorThings item; refusing partial harvest"
+                        ) from e
 
                 self.logger.info(
                     f"Processed {items_on_page} items from page {page_count}"
                 )
 
                 # Get the next page URL
-                url = data.get("@iot.nextLink")
+                next_link = data.get("@iot.nextLink")
+                url = urljoin(url, next_link) if next_link else None
                 if url and (limit == -1 or items_fetched < limit):
                     time.sleep(self.config.page_delay)
 
             except requests.RequestException as e:
                 self.logger.error(f"Failed to fetch page {page_count}: {str(e)}")
-                break
+                raise
 
     def _check_multidatastream(self) -> bool:
         multidatastream_endpoint = "MultiDatastreams"
-        res = requests.get(f"{self.base_url}/{multidatastream_endpoint}")
-        if not res.ok:
+        res = requests.get(
+            f"{self.base_url}/{multidatastream_endpoint}", timeout=self.config.timeout
+        )
+        if res.status_code in (400, 404):
             return False
+        res.raise_for_status()
         return True
+
+    def _expand_pages(self, item, base_url):
+        """Load all pages of expanded collections before accepting a Thing."""
+        for name in list(item):
+            if name.endswith("@iot.nextLink") and name != "@iot.nextLink":
+                collection = name.removesuffix("@iot.nextLink")
+                link = item.pop(name)
+                visited = set()
+                while link:
+                    url = urljoin(base_url, link)
+                    if url in visited:
+                        raise ValueError("Repeated expanded collection page")
+                    visited.add(url)
+                    response = requests.get(url, timeout=self.config.timeout)
+                    response.raise_for_status()
+                    page = response.json()
+                    item.setdefault(collection, []).extend(page["value"])
+                    link = page.get("@iot.nextLink")
+                    base_url = url
+        for value in item.values():
+            if isinstance(value, list):
+                for child in value:
+                    if isinstance(child, dict):
+                        self._expand_pages(child, base_url)
+            elif isinstance(value, dict):
+                self._expand_pages(value, base_url)

@@ -4,7 +4,6 @@ from typing import Literal
 from urllib.parse import urlsplit
 
 from ckanapi import RemoteCKAN
-from ckanapi.errors import NotFound, ValidationError
 
 from wrench.cataloger.base import BaseCataloger
 from wrench.models import CommonMetadata
@@ -28,6 +27,8 @@ class SDDICataloger(BaseCataloger):
         api_key: str,
         owner_org: str = "lehrstuhl-fur-geoinformatik",
         license_id: str = "notspecified",
+        managed_fields: list[str] | None = None,
+        dataset_ids: dict[str, str] | None = None,
         status: Literal["draft", "active"] = "draft",
         access_rights: Literal["private", "public"] = "private",
     ):
@@ -38,6 +39,11 @@ class SDDICataloger(BaseCataloger):
             base_url (str): Base URL of the SDDI catalog to register to.
             api_key (str): API Key for registration authorization.
             owner_org (str): Owner organization to which the dataset will belong to.
+            license_id: Source-data license for new entries.
+            status: Metadata status for new entries.
+            access_rights: Visibility for new entries.
+            managed_fields: Harvested fields that may change on existing entries.
+            dataset_ids: Explicit source-key to UUID mappings for legacy adoption.
 
         Raises:
             ValueError: If the provided configuration path is invalid or the
@@ -49,6 +55,31 @@ class SDDICataloger(BaseCataloger):
         self.ckan_server = RemoteCKAN(address=self.endpoint, apikey=self.api_key)
         self.owner_org = owner_org
         self.license_id = license_id
+        defaults = {
+            "spatial",
+            "begin_collection_date",
+            "end_collection_date",
+            "observed_property",
+            "is_sensor_group",
+        }
+        allowed = defaults | {
+            "title",
+            "notes",
+            "tags",
+            "protocol",
+            "service_standard",
+            "response_formats",
+            "service_type",
+            "http_method",
+        }
+        self.managed_fields = (
+            set(managed_fields) if managed_fields is not None else defaults
+        )
+        if self.managed_fields - allowed:
+            raise ValueError(
+                "Unsupported managed field; cannot manage identity, owner or access"
+            )
+        self.dataset_ids = dataset_ids or {}
         if status not in {"draft", "active"} or access_rights not in {
             "private",
             "public",
@@ -58,76 +89,18 @@ class SDDICataloger(BaseCataloger):
         self.access_rights = access_rights
         self._registries: set[str] = set()
 
-    def register(
-        self,
-        service: CommonMetadata,
-        groups: list[CommonMetadata],
-        managed_entries: list[str] | None,
-    ) -> list[str]:
-        online_service = self._create_online_service(service)
-        device_groups = self._create_device_groups(groups)
-        if managed_entries:
-            self._registries = set(managed_entries)
+    def register(self, service, groups, managed_entries=None) -> list[str]:
+        """Discover by stable UUID and preserve catalog-owned fields on updates."""
+        from .sync import CatalogSync
 
-        try:
-            if online_service.name in self._registries:
-                self._update_api_service(online_service)
-                self.logger.info("Successfully updated API Service")
-            else:
-                self._register_api_service(online_service)
-                self.logger.info("Successfully registered API Service")
-        except NotFound:
-            self.logger.error(
-                """No entries found for %s, please clear the .pipeline_store cache and
-                    rerun the pipeline""",
-                online_service.name,
-            )
-        except ValidationError as e:
-            self.logger.error(
-                "CKAN validation error for service %s: %s",
-                online_service.name,
-                str(e),
-            )
-            raise
-
-        if groups:
-            try:
-                for d in device_groups:
-                    self.logger.debug("Processing device group: %s", d.name)
-                    try:
-                        if d.name in self._registries:
-                            self._update_device_group(d)
-                            self.logger.debug(
-                                "Successfully updated Device Group: %s", d.name
-                            )
-                        else:
-                            self._register_device_group(d)
-                            self.logger.debug(
-                                "Successfully registered Device Group: %s", d.name
-                            )
-                            self._register_relationship(
-                                api_service_name=online_service.name,
-                                device_group_name=d.name,
-                            )
-                            self.logger.info(
-                                "Created relationships for device_group %s", d.name
-                            )
-                    except ValidationError as e:
-                        self.logger.error(
-                            "CKAN validation error for device group %s: %s",
-                            d.name,
-                            str(e),
-                        )
-                        # Continue processing other groups instead of failing completely
-                        continue
-            except NotFound:
-                self.logger.error(
-                    """No entries found for %s, please clear the .pipeline_store cache
-                        and rerun the pipeline""",
-                    d.name,
-                )
-
-        return list(self._registries)
+        sync = CatalogSync(self.ckan_server, self.managed_fields, self.dataset_ids)
+        service_entry = sync.upsert(service, self._create_online_service(service))
+        registered = [service_entry["id"]]
+        for metadata, model in zip(groups, self._create_device_groups(groups)):
+            entry = sync.upsert(metadata, model)
+            sync.relate(entry, service_entry)
+            registered.append(entry["id"])
+        return registered
 
     def _get_package(self, package_id: str):
         pkg = self.ckan_server.call_action(
@@ -286,6 +259,8 @@ class SDDICataloger(BaseCataloger):
                 points.extend(item["coordinates"])
             else:
                 raise ValueError("SDDI sensor groups require point locations")
+        if not points:
+            return ""
         return json.dumps(
             {"type": "MultiPoint", "coordinates": sorted({tuple(p) for p in points})}
         )

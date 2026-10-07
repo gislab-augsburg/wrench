@@ -1,4 +1,3 @@
-import pytest
 from geojson import FeatureCollection, Polygon
 
 from wrench.metadataenricher.sensorthings.spatial import (
@@ -52,8 +51,7 @@ class TestPolygonalExtentCalculator:
 
     def test_empty_devices_raises(self):
         calc = PolygonalExtentCalculator()
-        with pytest.raises(ValueError, match="Locations cannot be extracted"):
-            calc.calculate_extent([])
+        assert calc.calculate_extent([]) is None
 
     def test_device_with_no_locations_raises(self):
         calc = PolygonalExtentCalculator()
@@ -69,8 +67,7 @@ class TestPolygonalExtentCalculator:
             locations=[],
             time_frame=None,
         )
-        with pytest.raises(ValueError, match="Locations cannot be extracted"):
-            calc.calculate_extent([device])
+        assert calc.calculate_extent([device]) is None
 
     def test_polygon_is_closed(self, make_device):
         calc = PolygonalExtentCalculator()
