@@ -63,7 +63,7 @@ class PolygonalExtentCalculator(SpatialExtentCalculator):
         }
 
         if not locations:
-            raise ValueError("Locations cannot be extracted from Things")
+            return None
 
         # Update bounds for each location (handle both 2D and 3D coordinates)
         for coord in locations:

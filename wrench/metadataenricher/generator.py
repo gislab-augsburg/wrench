@@ -1,6 +1,5 @@
 from typing import Any
 
-from openai import OpenAI
 from pydantic import BaseModel
 
 from wrench.models import Group
@@ -30,6 +29,8 @@ class ContentGenerator:
         Args:
             config: LLM configuration for content generation
         """
+        from openai import OpenAI
+
         self.client = OpenAI(base_url=config.base_url, api_key=config.api_key)
         self.model = config.model
 

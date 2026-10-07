@@ -65,6 +65,16 @@ class TimeFrame(BaseModel):
     latest_time: datetime
 
 
+class PropertyStream(BaseModel):
+    """A source property and its Datastream or MultiDatastream endpoint."""
+
+    key: str
+    name: str
+    description: str = ""
+    url: str
+    time_frame: TimeFrame | None = None
+
+
 class Device(BaseModel):
     """Device model representing an entity with an ID."""
 
@@ -78,6 +88,8 @@ class Device(BaseModel):
     time_frame: TimeFrame | None  # if there are no datastreams
 
     properties: dict[str, Any] | None = None
+
+    property_streams: list[PropertyStream] = Field(default_factory=list)
 
     raw_data: dict[str, Any] = Field(default_factory=dict)
 
@@ -126,6 +138,10 @@ class CommonMetadata(BaseModel):
                                  Defaults to None.
     """
 
+    source_key: str | None = None
+    observed_property: str = ""
+    is_sensor_group: bool = False
+
     # required fields
     identifier: str
     title: str
@@ -154,6 +170,10 @@ class Group(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
+    source_key: str | None = None
+    description: str = ""
+    endpoint_urls: list[str] = Field(default_factory=list)
+    observed_property: str = ""
     name: str
     "Name of the group"
     devices: list[Device]

@@ -26,6 +26,11 @@ def _parse_from_registry(
             f"got: {list(config.keys())}"
         )
     name, params = next(iter(config.items()))
+    if registry is GROUPERS:
+        from wrench.grouper import OPTIONAL_GROUPERS, get_grouper
+
+        if name in OPTIONAL_GROUPERS:
+            return get_grouper(name)(**(params or {}))
     if name not in registry:
         raise ValueError(
             f"Unknown {type_name} '{name}'. Available: {list(registry.keys())}"

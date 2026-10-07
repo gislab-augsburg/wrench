@@ -1,0 +1,17 @@
+# Run with PipelineRunner.from_config_file(). No LLM configuration required.
+template_: SensorPipeline
+harvester:
+  sensorthings:
+    base_url: ${FROST_URL}
+grouper:
+  observed_property: {}
+metadataenricher:
+  sensorthings:
+    base_url: ${FROST_URL}
+    title: SensorThings service
+    description: SensorThings service and its observed properties.
+cataloger:
+  sddi:
+    base_url: ${CKAN_URL}
+    api_key: ${CKAN_API_KEY}
+    owner_org: ${CKAN_OWNER_ORG}

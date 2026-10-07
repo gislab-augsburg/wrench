@@ -26,6 +26,7 @@ class BaseMetadataEnricher(ABC):
         self.title = title
         self.description = description
 
+        self.content_generator = None
         if llm_config:
             self.content_generator = ContentGenerator(llm_config)
 
@@ -47,10 +48,10 @@ class BaseMetadataEnricher(ABC):
             title=self.title,
             identifier=sanitize_ckan_name(self.title, fallback_prefix="service"),
             description=self.description,
-            spatial_extent=str(geographic_extent),
+            spatial_extent=str(geographic_extent) if geographic_extent else "",
             temporal_extent=timeframe,
             source_type=self._get_source_type(),
-            last_updated=timeframe.latest_time,
+            last_updated=timeframe.latest_time if timeframe else None,
         )
 
         return self.metadata
@@ -71,7 +72,12 @@ class BaseMetadataEnricher(ABC):
         """
         geographic_extent = self._calculate_group_spatial_extent(group.devices)
         timeframe = self._calculate_timeframe(group.devices)
-        endpoint_urls = self._build_group_urls(group.devices)
+        endpoint_urls = group.endpoint_urls or self._build_group_urls(group.devices)
+        if group.source_key:
+            title = title or group.name
+            description = (
+                description or group.description or f"Sensor data for {group.name}."
+            )
 
         # Generate content if not provided and generator available
         if not title or not description:
@@ -89,6 +95,9 @@ class BaseMetadataEnricher(ABC):
             content = Content(name=title, description=description)
 
         return CommonMetadata(
+            source_key=group.source_key,
+            observed_property=group.observed_property,
+            is_sensor_group=True,
             identifier=sanitize_ckan_name(content.name, fallback_prefix="group"),
             title=content.name,
             description=content.description,
@@ -96,8 +105,8 @@ class BaseMetadataEnricher(ABC):
             tags=list(group.parent_classes),
             source_type=self._get_source_type(),
             temporal_extent=timeframe,
-            spatial_extent=str(geographic_extent),
-            last_updated=timeframe.latest_time,
+            spatial_extent=str(geographic_extent) if geographic_extent else "",
+            last_updated=timeframe.latest_time if timeframe else None,
             thematic_groups=[
                 parent.lower().replace(" ", "-") for parent in group.parent_classes
             ],
@@ -128,7 +137,7 @@ class BaseMetadataEnricher(ABC):
         """Calculate group spatial extent for devices."""
         pass
 
-    def _calculate_timeframe(self, devices: list[Device]) -> TimeFrame:
+    def _calculate_timeframe(self, devices: list[Device]) -> TimeFrame | None:
         """
         Calculate the overall timeframe spanning all sensor data.
 
@@ -163,6 +172,8 @@ class BaseMetadataEnricher(ABC):
                 time_bounds["latest"], device.time_frame.latest_time
             )
 
+        if time_bounds["earliest"] > time_bounds["latest"]:
+            return None
         return TimeFrame(
             start_time=time_bounds["earliest"], latest_time=time_bounds["latest"]
         )

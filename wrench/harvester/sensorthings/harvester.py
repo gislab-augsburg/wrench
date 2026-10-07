@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 from wrench.harvester.base import BaseHarvester
-from wrench.models import Device, TimeFrame
+from wrench.models import Device, PropertyStream, TimeFrame
 
 from .client import SensorThingsClient
 from .config import PaginationConfig
@@ -69,17 +70,64 @@ class SensorThingsHarvester(BaseHarvester):
                 observed_properties=observed_properties,
                 properties=thing.properties,
                 raw_data=thing.model_dump(),
+                property_streams=self._property_streams(thing),
             )
 
             devices.append(device)
 
         return devices
 
+    def _property_streams(self, thing: Thing) -> list[PropertyStream]:
+        result = []
+        for collection, streams in (
+            ("Datastreams", thing.datastreams),
+            ("MultiDatastreams", thing.multidatastreams),
+        ):
+            for stream in streams:
+                sid = stream.source_id if stream.source_id is not None else stream.id
+                literal = (
+                    str(sid)
+                    if isinstance(sid, int)
+                    else "'" + str(sid).replace("'", "''") + "'"
+                )
+                url = (
+                    self.client.base_url.rstrip("/")
+                    + "/"
+                    + collection
+                    + "("
+                    + quote(literal, safe="'")
+                    + ")"
+                )
+                properties = (
+                    [stream.observed_property]
+                    if collection == "Datastreams"
+                    else stream.observed_properties or []
+                )
+                for prop in properties:
+                    if prop is None:
+                        continue
+                    # Source-local IDs are stable when display names change. Definitions
+                    # may be shared by several distinct properties; do not merge implicitly.
+                    pid = prop.source_id if prop.source_id is not None else prop.id
+                    import json
+
+                    key = "ObservedProperties:" + json.dumps(pid, ensure_ascii=True)
+                    result.append(
+                        PropertyStream(
+                            key=key,
+                            name=prop.name,
+                            description=prop.description,
+                            url=url,
+                            time_frame=self._extract_outer_bounds([stream]),
+                        )
+                    )
+        return result
+
     def _build_timeframes(
         self, ds: list[Datastream], mds: list[MultiDatastream]
     ) -> TimeFrame | None:
         # use datastreams if available, mds if ds isn't available
-        streams = mds if not ds and mds else ds
+        streams = [*ds, *mds]
         return self._extract_outer_bounds(streams)
 
     def _extract_outer_bounds(
@@ -92,7 +140,7 @@ class SensorThingsHarvester(BaseHarvester):
             if ds.phenomenon_time:
                 parts = ds.phenomenon_time.split("/")
                 start_times.append(datetime.fromisoformat(parts[0]))
-                end_times.append(datetime.fromisoformat(parts[1]))
+                end_times.append(datetime.fromisoformat(parts[-1]))
 
         if not start_times:
             return None

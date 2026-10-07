@@ -17,6 +17,8 @@ model_config = ConfigDict(
 class SensorThingsBase(BaseModel):
     model_config = model_config
     id: str = Field(validation_alias="@iot.id", serialization_alias="@iot.id")
+    source_id: int | str | None = Field(default=None, validation_alias="@iot.id")
+    self_link: str | None = Field(default=None, alias="@iot.selfLink")
     name: str
     description: str
     properties: dict[str, Any] | None = None
@@ -27,7 +29,7 @@ class Sensor(SensorThingsBase):
 
 
 class ObservedProperty(SensorThingsBase):
-    pass
+    definition: str | None = None
 
 
 class Datastream(SensorThingsBase):

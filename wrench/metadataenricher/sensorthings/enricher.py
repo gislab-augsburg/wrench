@@ -21,7 +21,11 @@ from .spatial import (
 class SensorThingsMetadataEnricher(BaseMetadataEnricher):
     @validate_call
     def __init__(
-        self, base_url: str, title: str, description: str, llm_config: LLMConfig
+        self,
+        base_url: str,
+        title: str,
+        description: str,
+        llm_config: LLMConfig | None = None,
     ):
         """
         SensorThings-specific metadata enricher.
