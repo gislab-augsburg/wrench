@@ -18,17 +18,25 @@ class SDDIDataset(BaseModel):
     owner_org: str
     # optional with predefined defaults
     url: str | None = None
+    # SDDI composite fields are JSON-encoded lists, not flat author strings.
     author: str = ""
-    author_email: str = ""
+    maintainer: str = ""
+    status: str = "draft"
+    access_rights: str = "private"
+    service_standard: str = ""
+    protocol: str = ""
+    observed_property: str = ""
+    is_sensor_group: str = "false"
+    response_formats: str = ""
+    service_type: str = ""
+    http_method: str = ""
     begin_collection_date: str = ""
     end_collection_date: str = ""  # necessary to properly register entries
     groups: list[dict] = []
     language: str = ""
     licence_agreement: list[str] = ["licence_agreement_check"]
-    license_id: str = "Apache-2.0"
-    license_title: str = "Apache License 2.0"
-    license_url: str = "https://www.apache.org/licenses/LICENSE-2.0"
-    private: bool = False
+    license_id: str = "notspecified"
+    private: bool = True
     relationships_as_object: list[dict] = []
     relationships_as_subject: list[dict] = []
     spatial: str = ""
@@ -43,7 +51,8 @@ class SDDIDataset(BaseModel):
 
 
 class OnlineService(SDDIDataset):
-    groups: list[dict] = [{"name": SDDICategory.online_service.value}]
+    type: str = "online-service"
+    groups: list[dict] = []
 
     @computed_field  # type: ignore[misc]
     @property
@@ -52,14 +61,17 @@ class OnlineService(SDDIDataset):
             {
                 "name": "API Service URL",
                 "description": "URL for the API service",
-                "format": "api",
+                "format": "JSON",
+                "linkage": self.url,
+                "mime_type": "application/json",
                 "url": self.url,
             }
         ]
 
 
 class DeviceGroup(SDDIDataset):
-    groups: list[dict] = [{"name": SDDICategory.device.value}]
+    type: str = "device"
+    groups: list[dict] = []
     resources: list[dict] = []
 
     @classmethod

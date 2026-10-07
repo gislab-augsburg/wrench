@@ -1,4 +1,7 @@
+import json
 from datetime import datetime
+from typing import Literal
+from urllib.parse import urlsplit
 
 from ckanapi import RemoteCKAN
 from ckanapi.errors import NotFound, ValidationError
@@ -24,6 +27,9 @@ class SDDICataloger(BaseCataloger):
         base_url: str,
         api_key: str,
         owner_org: str = "lehrstuhl-fur-geoinformatik",
+        license_id: str = "notspecified",
+        status: Literal["draft", "active"] = "draft",
+        access_rights: Literal["private", "public"] = "private",
     ):
         """
         Initialize the register with the given configuration.
@@ -42,6 +48,14 @@ class SDDICataloger(BaseCataloger):
 
         self.ckan_server = RemoteCKAN(address=self.endpoint, apikey=self.api_key)
         self.owner_org = owner_org
+        self.license_id = license_id
+        if status not in {"draft", "active"} or access_rights not in {
+            "private",
+            "public",
+        }:
+            raise ValueError("Invalid SDDI status or access_rights")
+        self.status = status
+        self.access_rights = access_rights
         self._registries: set[str] = set()
 
     def register(
@@ -177,34 +191,33 @@ class SDDICataloger(BaseCataloger):
             url=metadata.endpoint_urls[0],
             name=metadata.identifier,
             notes=metadata.description,
-            owner_org=metadata.owner or DEFAULT_OWNER,
+            owner_org=metadata.owner or self.owner_org,
             title=metadata.title,
-            tags=[{"name": tag for tag in metadata.tags}],
+            tags=[{"name": tag} for tag in metadata.tags or ["sensorthings"]],
             spatial=metadata.spatial_extent,
+            license_id=self.license_id,
+            status=self.status,
+            access_rights=self.access_rights,
+            private=self.access_rights == "private",
+            service_type="RESTful",
+            service_standard="REST",
+            http_method="GET",
+            protocol=urlsplit(metadata.endpoint_urls[0]).scheme.upper(),
+            begin_collection_date=metadata.temporal_extent.start_time.strftime(
+                "%Y-%m-%d"
+            )
+            if metadata.temporal_extent
+            else "",
+            end_collection_date=metadata.temporal_extent.latest_time.strftime(
+                "%Y-%m-%d"
+            )
+            if metadata.temporal_extent
+            else "",
         )
 
     def _create_device_groups(
         self, metadata: list[CommonMetadata]
     ) -> list[DeviceGroup]:
-        DOMAIN_GROUPS = [
-            "administration",
-            "mobility",
-            "environment",
-            "agriculture",
-            "urban-planning",
-            "health",
-            "energy",
-            "information-technology",
-            "tourism",
-            "living",
-            "education",
-            "construction",
-            "culture",
-            "trade",
-            "craft",
-            "work",
-        ]
-
         device_groups: list[DeviceGroup] = []
 
         for group in metadata:
@@ -224,12 +237,25 @@ class SDDICataloger(BaseCataloger):
                 url=group.endpoint_urls[0],
                 name=group.identifier,
                 notes=group.description,
-                owner_org=group.owner or DEFAULT_OWNER,
+                owner_org=group.owner or self.owner_org,
                 begin_collection_date=start_date,
                 end_collection_date=latest_date,
                 title=group.title,
-                tags=[{"name": tag} for tag in group.tags],
-                spatial=group.spatial_extent,
+                tags=[
+                    {"name": tag} for tag in group.tags or ["sensorthings", "sensor"]
+                ],
+                spatial=self._group_spatial(group.spatial_extent)
+                if group.is_sensor_group
+                else group.spatial_extent,
+                license_id=self.license_id,
+                status=self.status,
+                access_rights=self.access_rights,
+                private=self.access_rights == "private",
+                observed_property=group.observed_property,
+                is_sensor_group="true" if group.is_sensor_group else "false",
+                service_standard="OGC_SensorThings",
+                response_formats="JSON",
+                protocol=urlsplit(group.endpoint_urls[0]).scheme.upper(),
                 resources=[
                     {
                         "name": f"URL-{i} for {group.title}",
@@ -240,13 +266,26 @@ class SDDICataloger(BaseCataloger):
                     for i, url in enumerate(group.endpoint_urls)
                 ],
             )
-            device_group.groups.extend(
-                [
-                    {"name": domain}
-                    for domain in group.thematic_groups
-                    if domain in DOMAIN_GROUPS
-                ]
-            )
             device_groups.append(device_group)
 
         return device_groups
+
+    @staticmethod
+    def _group_spatial(spatial: str) -> str:
+        """Map point sensor locations to the SDDI sensor-group MultiPoint."""
+        if not spatial:
+            return ""
+        geometry = json.loads(spatial)
+        features = geometry.get("features", [geometry])
+        points = []
+        for feature in features:
+            item = feature.get("geometry", feature)
+            if item["type"] == "Point":
+                points.append(item["coordinates"])
+            elif item["type"] == "MultiPoint":
+                points.extend(item["coordinates"])
+            else:
+                raise ValueError("SDDI sensor groups require point locations")
+        return json.dumps(
+            {"type": "MultiPoint", "coordinates": sorted({tuple(p) for p in points})}
+        )
