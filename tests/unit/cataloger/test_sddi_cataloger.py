@@ -117,7 +117,7 @@ class TestCreateDeviceGroups:
             description="desc",
             endpoint_urls=["https://example.com"],
             source_type="test",
-            spatial_extent="{}",
+            spatial_extent="",
             temporal_extent=TimeFrame(
                 start_time=datetime(2023, 1, 1, tzinfo=timezone.utc),
                 latest_time=datetime(2024, 1, 1, tzinfo=timezone.utc),

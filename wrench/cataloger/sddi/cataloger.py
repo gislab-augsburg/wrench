@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from typing import Literal
 from urllib.parse import urlsplit
@@ -94,9 +93,11 @@ class SDDICataloger(BaseCataloger):
         from .sync import CatalogSync
 
         sync = CatalogSync(self.ckan_server, self.managed_fields, self.dataset_ids)
+        # Validate every group before making any CKAN writes.
+        device_groups = self._create_device_groups(groups)
         service_entry = sync.upsert(service, self._create_online_service(service))
         registered = [service_entry["id"]]
-        for metadata, model in zip(groups, self._create_device_groups(groups)):
+        for metadata, model in zip(groups, device_groups):
             entry = sync.upsert(metadata, model)
             sync.relate(entry, service_entry)
             registered.append(entry["id"])
@@ -217,9 +218,7 @@ class SDDICataloger(BaseCataloger):
                 tags=[
                     {"name": tag} for tag in group.tags or ["sensorthings", "sensor"]
                 ],
-                spatial=self._group_spatial(group.spatial_extent)
-                if group.is_sensor_group
-                else group.spatial_extent,
+                spatial=self._group_spatial(group.spatial_extent, group.is_sensor_group),
                 license_id=self.license_id,
                 status=self.status,
                 access_rights=self.access_rights,
@@ -244,23 +243,7 @@ class SDDICataloger(BaseCataloger):
         return device_groups
 
     @staticmethod
-    def _group_spatial(spatial: str) -> str:
-        """Map point sensor locations to the SDDI sensor-group MultiPoint."""
-        if not spatial:
-            return ""
-        geometry = json.loads(spatial)
-        features = geometry.get("features", [geometry])
-        points = []
-        for feature in features:
-            item = feature.get("geometry", feature)
-            if item["type"] == "Point":
-                points.append(item["coordinates"])
-            elif item["type"] == "MultiPoint":
-                points.extend(item["coordinates"])
-            else:
-                raise ValueError("SDDI sensor groups require point locations")
-        if not points:
-            return ""
-        return json.dumps(
-            {"type": "MultiPoint", "coordinates": sorted({tuple(p) for p in points})}
-        )
+    def _group_spatial(spatial: str, sensor_group: bool = False) -> str:
+        from .spatial import group_spatial
+
+        return group_spatial(spatial, sensor_group)

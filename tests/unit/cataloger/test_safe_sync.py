@@ -90,7 +90,7 @@ def test_rerun_preserves_curation_ids_and_relationships(make_common_metadata):
     assert pkg["name"] == "manually-renamed-slug"
     assert pkg["manufacturer"] == "Manual manufacturer" and not pkg["private"]
     assert pkg["license_id"] == "custom-license"
-    assert pkg["spatial"] == group.spatial_extent
+    assert pkg["spatial"] == SDDICataloger._group_spatial(group.spatial_extent)
     assert pkg["resources"][0]["id"] == rid
     assert pkg["resources"][0]["description"] == "Manual resource description"
     assert pkg["resources"][1]["id"] == "manual"
