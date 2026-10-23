@@ -1,5 +1,6 @@
 """Conservative CKAN synchronization independent of local pipeline caches."""
 
+import json
 from uuid import NAMESPACE_URL, uuid5
 
 from ckanapi.errors import NotFound
@@ -71,6 +72,17 @@ class CatalogSync:
                 for k in self.managed_fields
                 if k in desired and existing.get(k) != desired[k]
             }
+            # Preserve manual sensor classifications unless explicitly managed.
+            # Never attach area geometry to a retained true sensor-group flag.
+            sensor = changes.get("is_sensor_group", existing.get("is_sensor_group"))
+            spatial = changes.get("spatial", existing.get("spatial"))
+            if sensor in (True, "true") and spatial:
+                if json.loads(spatial).get("type") != "MultiPoint":
+                    raise ValueError(
+                        f"Dataset {existing['id']} is classified as a sensor group. "
+                        "Review is_sensor_group before updating to non-point geometry; "
+                        "manual classification was preserved."
+                    )
             if changes:
                 self.action("package_patch", id=existing["id"], **changes)
 

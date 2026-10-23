@@ -59,9 +59,10 @@ class SDDICataloger(BaseCataloger):
             "begin_collection_date",
             "end_collection_date",
             "observed_property",
-            "is_sensor_group",
+            "is_thing_group",
         }
         allowed = defaults | {
+            "is_sensor_group",
             "title",
             "notes",
             "tags",
@@ -207,6 +208,15 @@ class SDDICataloger(BaseCataloger):
             ):
                 latest_date = ""
 
+            try:
+                spatial = self._group_spatial(
+                    group.spatial_extent, group.is_sensor_group
+                )
+            except ValueError as error:
+                raise ValueError(
+                    f"Group {group.source_key or group.identifier}: {error}"
+                ) from error
+
             device_group = DeviceGroup(
                 url=group.endpoint_urls[0],
                 name=group.identifier,
@@ -215,10 +225,8 @@ class SDDICataloger(BaseCataloger):
                 begin_collection_date=start_date,
                 end_collection_date=latest_date,
                 title=group.title,
-                tags=[
-                    {"name": tag} for tag in group.tags or ["sensorthings", "sensor"]
-                ],
-                spatial=self._group_spatial(group.spatial_extent, group.is_sensor_group),
+                tags=[{"name": tag} for tag in group.tags or ["sensorthings", "thing"]],
+                spatial=spatial,
                 license_id=self.license_id,
                 status=self.status,
                 access_rights=self.access_rights,

@@ -42,8 +42,16 @@ including correctly escaped string IDs. Properties without matching streams do n
 produce groups. MultiDatastream URLs expose the full vector observation, including
 its other properties; this importer does not project individual vector components.
 Time ranges are calculated from matching streams. Missing dates/locations are omitted.
-Sensor groups with locations must have point or MultiPoint locations for the SDDI
-MultiPoint constraint; non-point locations raise an error instead of inventing positions.
+ObservedProperty groups are Thing groups (`is_thing_group: "true"`) and are not
+automatically classified as sensor groups (`is_sensor_group: "false"`). Geometry
+does not determine sensor status. All remain CKAN type `device`.
+Point locations aggregate to MultiPoint, polygons to MultiPolygon and lines to
+MultiLineString; mixed types become GeometryCollection. Polygon holes and source
+coordinates are retained; exact duplicate geometries are removed. No centroids,
+boundary dissolution or invented sensor positions are used. Invalid geometry
+fails validation before any catalog write. Explicit sensor groups still require
+point geometry. GeometryCollection display/search needs testing on your CKAN/Solr.
+Deploy the updated sddi_device.yaml before running this version.
 The online-service schema does not offer OGC_SensorThings, so service_standard is REST;
 device groups use OGC_SensorThings. No changes to the schema repository are required.
 
@@ -62,7 +70,7 @@ propagate; retries discover already-created records. CKAN must retain caller-sup
 dataset UUIDs and dataset/resource provenance fields. Validate this with a staging catalog.
 
 Updates manage only `spatial`, `begin_collection_date`, `end_collection_date`,
-`observed_property`, and `is_sensor_group` by default. Titles, descriptions, authors,
+`observed_property`, and `is_thing_group` by default. Titles, descriptions, authors,
 maintainers, tags, licenses, access settings and other curated fields survive updates.
 An optional `managed_fields` list replaces these defaults; use it to opt in to generated
 titles/notes or other supported fields. Identity, ownership and access cannot be managed
@@ -86,3 +94,19 @@ The ML groupers remain available, but names from changing clusters cannot provid
 same semantic stability as ObservedProperty IDs. These guarantees target the deterministic
 ObservedProperty pipeline. Failed/incomplete SensorThings pages abort the harvest; nested
 expanded collections are paginated rather than silently truncated.
+
+
+## Existing sensor-group classifications
+
+The is_sensor_group flag is now set to false only on creation, and preserved on
+reruns by default. Old versions generated true automatically, but that value is
+indistinguishable from a manual classification. Review existing true values:
+for building/area groups set is_sensor_group=false and is_thing_group=true in CKAN.
+If a retained true flag conflicts with incoming non-point geometry, synchronization
+stops with the dataset ID instead of silently changing the classification.
+For a deliberately approved bulk migration, add is_sensor_group to managed_fields
+along with spatial, begin_collection_date, end_collection_date, observed_property
+and is_thing_group. This replaces the default list and makes the generated false
+value authoritative; remove is_sensor_group afterwards to preserve editorial changes.
+Existing UUIDs, slugs, resources and manually maintained metadata remain stable.
+The already-created service entry can be reused with the same FROST URL.

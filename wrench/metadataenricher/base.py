@@ -97,7 +97,8 @@ class BaseMetadataEnricher(ABC):
         return CommonMetadata(
             source_key=group.source_key,
             observed_property=group.observed_property,
-            is_sensor_group=True,
+            is_thing_group=True,
+            is_sensor_group=False,
             identifier=sanitize_ckan_name(content.name, fallback_prefix="group"),
             title=content.name,
             description=content.description,

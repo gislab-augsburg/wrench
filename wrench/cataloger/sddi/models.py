@@ -71,6 +71,7 @@ class OnlineService(SDDIDataset):
 
 class DeviceGroup(SDDIDataset):
     type: str = "device"
+    is_thing_group: str = "true"
     groups: list[dict] = []
     resources: list[dict] = []
 

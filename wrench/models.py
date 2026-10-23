@@ -140,6 +140,7 @@ class CommonMetadata(BaseModel):
 
     source_key: str | None = None
     observed_property: str = ""
+    is_thing_group: bool = False
     is_sensor_group: bool = False
 
     # required fields

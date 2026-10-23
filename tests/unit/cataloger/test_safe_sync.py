@@ -131,3 +131,35 @@ def test_sources_do_not_collide_and_managed_fields_opt_in(make_common_metadata):
     a.title = "New title"
     catalog(client, managed_fields=["title"]).register(a, [])
     assert client.packages[dataset_id(a.source_key)]["title"] == "New title"
+
+
+def test_thing_group_migration_preserves_classification_and_identity(
+    make_common_metadata,
+):
+    client = FakeCKAN()
+    service = make_common_metadata(source_key="https://f|service")
+    group = make_common_metadata(
+        source_key="https://f|ObservedProperties:1",
+        spatial_extent='{"type":"Point","coordinates":[10,20]}',
+    )
+    ids = catalog(client).register(service, [group])
+    package = client.packages[ids[1]]
+    assert package["is_thing_group"] == "true"
+    assert package["is_sensor_group"] == "false"
+    package["is_sensor_group"] = "true"  # curator or legacy import
+    package["notes"] = "Manual notes"
+    assert catalog(client).register(service, [group]) == ids
+    assert package["is_sensor_group"] == "true"
+    group.spatial_extent = (
+        '{"type":"Polygon","coordinates":[[[0,0],[4,0],[4,4],[0,0]]]}'
+    )
+    previous = package["spatial"]
+    with pytest.raises(ValueError, match=ids[1]):
+        catalog(client).register(service, [group])
+    assert package["spatial"] == previous and package["is_sensor_group"] == "true"
+    # Explicitly approved migration via managed_fields; no delete/recreate.
+    managed = ["spatial", "is_thing_group", "is_sensor_group"]
+    assert catalog(client, managed_fields=managed).register(service, [group]) == ids
+    assert package["is_sensor_group"] == "false"
+    assert package["notes"] == "Manual notes"
+    assert "MultiPolygon" in package["spatial"]
